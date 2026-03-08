@@ -1,0 +1,143 @@
+# 🩺 MedNotes AI — Setup Guide
+
+## What is this project?
+
+**MedNotes AI** is an AI-powered medical assistant that streamlines the patient-doctor journey. It has three phases:
+
+1. **Pre-Consultation** — AI chatbot helps patients describe symptoms and book appointments with the right specialist
+2. **Consultation** — Records and transcribes the doctor-patient conversation, then generates clinical notes using AI
+3. **Post-Consultation** — RAG-powered chatbot lets both doctors and patients ask questions about past consultations
+
+### Tech Stack
+| Layer | Technology |
+|-------|------------|
+| Frontend + Backend | **Next.js 16** (React 19, TypeScript) |
+| Auth & Database | **Supabase** (PostgreSQL, RLS, Storage) |
+| UI Components | **shadcn/ui** + Tailwind CSS v4 |
+| AI Models | Gemini 2.5 Flash, Groq Llama 3.3, AssemblyAI, Amazon Nova 2 via OpenRouter |
+| AI Orchestration | **Kestra** (Docker) |
+| Deployment | Vercel |
+
+---
+
+## Step-by-Step Setup
+
+### Step 1 — Install Node.js Dependencies
+
+```bash
+cd c:\Users\HP\OneDrive\Desktop\mednotes-ai\app
+npm install
+```
+
+### Step 2 — Create a Supabase Project
+
+1. Go to [https://supabase.com](https://supabase.com) and create a **free** account
+2. Click **"New Project"** → give it a name like `mednotes-ai`
+3. Set a database password (save it somewhere)
+4. Wait for the project to provision
+
+Once ready, go to **Project Settings → API** and copy:
+- **Project URL** (looks like `https://xxxxx.supabase.co`)
+- **Anon/Public Key** (the `anon` key)
+
+### Step 3 — Set Up the Database
+
+In your Supabase dashboard:
+
+1. Go to **SQL Editor**
+2. Run each migration file **in order** from `supabase/migrations/`:
+
+| Order | File | What it creates |
+|-------|------|-----------------|
+| 1 | `001_create_profiles_table.sql` | `profiles` table with RLS + auto-create on signup |
+| 2 | `002_create_core_tables.sql` | `appointments`, `consultations`, `documents`, `chat_messages` tables |
+| 3 | `003_create_booking_chat_table.sql` | Booking chat history table |
+| 4 | `004_create_test_doctor.sql` | Seed data for a test doctor |
+| 5 | `005_allow_viewing_doctors.sql` | RLS policy for viewing doctor profiles |
+| 6 | `006_create_doctor_availability.sql` | Doctor availability/schedule table |
+| 7 | `007_add_chat_id_to_booking_chat.sql` | Adds chat_id column |
+| 8 | `008_add_role_to_booking_chat.sql` | Adds role column |
+| 9 | `009_add_booking_chat_id_to_appointments.sql` | Links booking chats to appointments |
+
+> [!IMPORTANT]
+> Run them **in order** (001 → 009). Each builds on the previous one.
+
+### Step 4 — Get API Keys
+
+You need API keys from these services (all have **free tiers**):
+
+| Service | Purpose | Get it at |
+|---------|---------|-----------|
+| **Gemini** | Main AI model (chat, booking) | [aistudio.google.com](https://aistudio.google.com/apikey) |
+| **Groq** | Fallback AI model | [console.groq.com](https://console.groq.com/keys) |
+| **AssemblyAI** | Audio transcription | [assemblyai.com](https://www.assemblyai.com/dashboard/signup) |
+| **OpenRouter** | Consultation summaries (Amazon Nova 2) | [openrouter.ai](https://openrouter.ai/keys) |
+
+### Step 5 — Create `.env.local`
+
+Create a file called `.env.local` in the `app/` directory:
+
+**File:** `c:\Users\HP\OneDrive\Desktop\mednotes-ai\app\.env.local`
+
+```env
+NEXT_PUBLIC_SUPABASE_URL="your-supabase-project-url"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="your-supabase-anon-key"
+GOOGLE_GENERATIVE_AI_API_KEY="your-gemini-api-key"
+GROQ_API_KEY="your-groq-api-key"
+ASSEMBLYAI_API_KEY="your-assemblyai-api-key"
+OPENROUTER_API_KEY="your-openrouter-api-key"
+```
+
+Replace each placeholder with your actual keys from Steps 2 and 4.
+
+### Step 6 — Run the App
+
+```bash
+cd c:\Users\HP\OneDrive\Desktop\mednotes-ai\app
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### Step 7 (Optional) — Set Up Kestra Agent Workflows
+
+This is only needed for the **consultation recording → transcription → AI summary** pipeline. The basic app (booking, chat) works without it.
+
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+2. Start Kestra:
+   ```bash
+   cd c:\Users\HP\OneDrive\Desktop\mednotes-ai\agent
+   docker-compose up -d
+   ```
+3. Open Kestra UI at [http://localhost:8080](http://localhost:8080)
+4. Import the two workflow files from `agent/workflow/`:
+   - `audio_transcription.yml`
+   - `ai_summary_workflow.yml`
+
+---
+
+## Demo Credentials
+
+Once the database is seeded (after running migration `004`), you can log in with:
+
+| Role | Email | Password |
+|------|-------|----------|
+| Patient | `hari@user.com` | `testpass` |
+| Doctor | `test@doctor.com` | `testpass` |
+
+> [!NOTE]
+> These test users are created by migration `004_create_test_doctor.sql`. You may also need to create these users in **Supabase Auth** (Authentication → Users → Add User) with the same email/password for login to work.
+
+---
+
+## What You Can Do Without All API Keys
+
+| Feature | Required Keys |
+|---------|--------------|
+| Login, Dashboard UI | Supabase only |
+| AI Booking Chat | Supabase + Gemini (or Groq as fallback) |
+| Post-consultation RAG Chat | Supabase + Gemini (or Groq) |
+| Audio Transcription | Supabase + AssemblyAI + Kestra |
+| AI Summary/Report | Supabase + OpenRouter + Kestra |
+
+You can start with just **Supabase + Gemini** to explore most features.
